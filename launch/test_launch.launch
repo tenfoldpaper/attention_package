@@ -5,28 +5,35 @@
   <arg name="detection_topic" default="/yolov5/detection" />
   <arg name="foveation_topic" default="/attention/foveated" />
   <arg name="recompose_topic" default="/attention/recomposed" />
+  <arg name="rgb_topic" default="/attention/rgb_foveated" />
+  
   <arg name="save_img" default="false"/>
+  <arg name="save_rgb" default="false"/>
   <arg name="show_img" default="false"/>
   <arg name="fov_level" default="3"/>
   <arg name="max_scale" default="5"/>
   <arg name="save_path" default="./foveation_imgs/"/>
   
   <!-- Foveation node -->
-  <node pkg="attention_package" type="foveate.py" name="foveate" output="screen">
+  <node pkg="attention_package" type="alt_foveate.py" name="foveate" output="screen">
     <param name="detection_topic" value="$(arg detection_topic)"/>
     <param name="publish_topic" value="$(arg foveation_topic)" />
+    <param name="rgb_publish_topic" value="$(arg rgb_topic)" />
+    
     <param name="fov_level" value="$(arg fov_level)" />
     <param name="max_scale" value="$(arg max_scale)" />
     <param name="save_img" value="$(arg save_img)" />
+    <param name="save_rgb" value="$(arg save_rgb)" />
     <param name="show_img" value="$(arg show_img)" />
     <param name="save_path" value="$(arg save_path)" />
   </node>
 
-  <!-- Image reecomposition node -->
-  <node pkg="attention_package" type="recompose.py" name="recompose" output="screen">
+  <!-- Image recomposition node -->
+  <node pkg="attention_package" type="alt_recompose.py" name="recompose" output="screen">
     <param name="foveation_topic" value="$(arg foveation_topic)" />
     <param name="publish_topic" value="$(arg recompose_topic)" />
     <param name="save_img" value="$(arg save_img)" />
+    <param name="save_rgb" value="false" />
     <param name="show_img" value="$(arg show_img)" />
     <param name="save_path" value="$(arg save_path)" />
   </node>

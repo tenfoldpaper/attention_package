@@ -50,8 +50,10 @@ catkin_python_setup()
 add_message_files(
   FILES
   FoveatedImage.msg
+  FoveatedImageCombined.msg
   FoveatedImages.msg
   FoveatedImageGroups.msg
+  FoveatedImageMeta.msg
   Tuple.msg
   #   Message1.msg
 #   Message2.msg
@@ -175,6 +177,8 @@ catkin_install_python(
     scripts/fov_subber.py
     scripts/recompose.py
     scripts/foveate.py
+    scripts/alt_foveate.py
+    scripts/alt_recompose.py
     
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

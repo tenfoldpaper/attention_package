@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from attention_package.msg import FoveatedImageGroups, FoveatedImage, FoveatedImages, Tuple
+from attention_package.msg import FoveatedImageMeta, FoveatedImageCombined
 from yolov5_detector.msg import DetectionMsg, DetectionArray
 
 import numpy as np
@@ -43,7 +43,7 @@ class recompose_node:
         publish_topic = rospy.get_param("~publish_topic")
         foveation_topic = rospy.get_param("~foveation_topic")
         self.publisher = rospy.Publisher(publish_topic, Image, queue_size=5)
-        self.subscriber = rospy.Subscriber(foveation_topic, FoveatedImageGroups, self.recompose_callback)
+        self.subscriber = rospy.Subscriber(foveation_topic, FoveatedImageMeta, self.recompose_callback)
         self.bridge = cv_bridge.CvBridge()
         self.save_img = rospy.get_param("~save_img")
         self.show_img = rospy.get_param("~show_img")
@@ -76,41 +76,27 @@ class recompose_node:
                 recomposed_img = np.zeros((data.height, data.width, 3), dtype=np.uint8)
             else:
                 recomposed_img = np.zeros((data.height, data.width), dtype=np.uint16)
-            for i in range(0, detection_count): # and we want to loop through at the same foveation level, across detected objects.
-                curr_img = data.foveated_images_groups[i].foveated_images[f].foveated_image
-                curr_bb_origin = data.foveated_images_groups[i].foveated_images[f].bounding_box_origins.tpl
-                curr_bb_end = data.foveated_images_groups[i].foveated_images[f].bounding_box_sizes.tpl
-                resize_height = curr_bb_end[0] - curr_bb_origin[0]
-                resize_width = curr_bb_end[1] - curr_bb_origin[1]
-
-                if(self.save_rgb and self.save_img):
-                    curr_img = self.bridge.imgmsg_to_cv2(curr_img, 'rgb8')
-                else:
-                    curr_img.encoding = 'mono16'
-                    curr_img = self.bridge.imgmsg_to_cv2(curr_img, 'mono16')
-                curr_img = cv2.resize(curr_img, (resize_width, resize_height), interpolation=cv2.INTER_NEAREST)
-
-                # at the highest foveation level, there are lots of empty patches, so a bitwise OR is better than straight up replacement.
-                try:
-                    if(self.save_rgb and self.save_img):
-                        recomposed_img[curr_bb_origin[0]:curr_bb_end[0], curr_bb_origin[1]:curr_bb_end[1], :] = \
-                            cv2.bitwise_or(recomposed_img[curr_bb_origin[0]:curr_bb_end[0], curr_bb_origin[1]:curr_bb_end[1], :], curr_img)
-                    else:    
-                        recomposed_img[curr_bb_origin[0]:curr_bb_end[0], curr_bb_origin[1]:curr_bb_end[1]] = \
-                            cv2.bitwise_or(recomposed_img[curr_bb_origin[0]:curr_bb_end[0], curr_bb_origin[1]:curr_bb_end[1]], curr_img)
-                    #combined_img[curr_bb_origin[0]:curr_bb_end[0], curr_bb_origin[1]:curr_bb_end[1]] = \
-                    #    cv2.bitwise_or(combined_img[curr_bb_origin[0]:curr_bb_end[0], curr_bb_origin[1]:curr_bb_end[1]], curr_img)
-                except:
-                    #breakpoint()
-                    pass
+            breakpoint()
+            
+            curr_img = np.fromstring(data.foveated_images_groups[f].foveated_image.data, np.uint16)
+            curr_img = cv2.imdecode(curr_img, cv2.IMREAD_GRAYSCALE)
+            # if(self.save_rgb and self.save_img):
+            #     curr_img = self.bridge.imgmsg_to_cv2(curr_img, 'rgb8')
+            # else:
+            #     curr_img.encoding = 'mono16'
+            #     curr_img = self.bridge.imgmsg_to_cv2(curr_img, 'mono16')
+            curr_img = cv2.resize(curr_img, (data.width, data.height), interpolation=cv2.INTER_NEAREST)
+            breakpoint()
+            try:
+                recomposed_img = \
+                    cv2.bitwise_or(recomposed_img, curr_img)
+            except:
+                #breakpoint()
+                pass
                     
-
-                # coloured_depth = ((recomposed_img / np.max(recomposed_img))*256).astype(np.uint8)
-                # coloured_depth = cv2.applyColorMap(coloured_depth, cv2.COLORMAP_HSV)
-                # cv2.imshow('recomposed, curr_img', coloured_depth)
-                # cv2.waitKey(0)
+            cv2.imwrite('curr_img.png', curr_img)
+            cv2.imwrite('recomposed_img.png', recomposed_img)
             recomposed_img_arr.append(recomposed_img.copy())
-
         
         if(self.save_img and self.save_rgb): # rgb img
             recomposed_img = np.zeros((data.height, data.width, 3), dtype=np.uint8)
@@ -120,7 +106,6 @@ class recompose_node:
         for i in range(0, fov_level):
             
             recomposed_img = cv2.bitwise_or(recomposed_img, recomposed_img_arr[i])
-
             if(self.save_img and not self.save_rgb): # depth img
                 print('this should be called')
                 coloured_depth = ((recomposed_img_arr[i] / np.max(recomposed_img_arr[i]))*256).astype(np.uint8)
