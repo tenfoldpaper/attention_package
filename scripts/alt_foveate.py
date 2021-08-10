@@ -100,7 +100,6 @@ class foveation_node:
         range_ind = np.argpartition(hist[0], -2)[-2:] # result is ascending-sorted, i.e. argmax is at the last index.
         range_ind_low = range_ind[0] if range_ind[0] < range_ind[1] else range_ind[1]
         range_ind_high = range_ind[1] if range_ind[1] > range_ind[0] else range_ind[0]
-
         return range_ind_low, range_ind_high, hist[1]
 
     def calculate_fovlevel_bb(self, bb_origin, bb_size, img_width, img_height, fovlevel):
@@ -116,13 +115,11 @@ class foveation_node:
         # the outermost foveation being too small.
         lower_bounds = (np.linspace(lower_bound[0], 0, num=fovlevel).astype(int), np.linspace(lower_bound[1], 0, num=fovlevel).astype(int))
         upper_bounds = (np.linspace(upper_bound[0], img_height, num=fovlevel).astype(int), np.linspace(upper_bound[1], img_width, num=fovlevel).astype(int))
-
         lower_bounds = list(zip(lower_bounds[0], lower_bounds[1]))
         upper_bounds = list(zip(upper_bounds[0], upper_bounds[1]))
         
 
         fovlevel_bb = list(zip(lower_bounds, upper_bounds))
-
         return fovlevel_bb
 
     def calculate_fovlevel_depth(self, center_low, center_high, bins, fovlevel):
@@ -132,7 +129,6 @@ class foveation_node:
         lower_bounds = np.linspace(center_low, 0, num=fovlevel).astype(int)
         upper_bounds = np.linspace(center_high, len(bins) - 1, num=fovlevel).astype(int)
         
-
         fovlevel_depth = list(zip(lower_bounds, upper_bounds))
         return fovlevel_depth
 
@@ -197,12 +193,12 @@ class foveation_node:
             # convert it to pixel positions
             _bb_origins.append(np.array([img_height * bb_ogsz[0], img_width * bb_ogsz[1]]).astype(int))
             _bb_sizes.append(np.array([img_height * bb_ogsz[2], img_width * bb_ogsz[3]]).astype(int))
-            
             # Get the detection-specific parameters that will be used to crop the image
             center_low, center_high, bins = self.identify_center_depth_range(depth_img, _bb_origins[i], _bb_sizes[i])
             fovlevel_bb = self.calculate_fovlevel_bb( _bb_origins[i], _bb_sizes[i], depth_img.shape[1], depth_img.shape[0], self.fov_level)
             fovlevel_depth = self.calculate_fovlevel_depth(center_low, center_high, bins, self.fov_level)
             scale_values = np.linspace(1, self.max_scale, num=self.fov_level).astype(int)
+            breakpoint()
             
             # Gather them all into arrays
             _center_highs.append(center_high)
@@ -236,7 +232,6 @@ class foveation_node:
                     cropped_img = img[np.ix_(focus_height, focus_width)].astype(np.uint16)
                     
                 except:
-                    #breakpoint()
                     pass
                 
                 cropped_img[cropped_img < bins[int(depth_lower)]] = 0
@@ -253,7 +248,6 @@ class foveation_node:
             # Compress the image
             fov_msg.foveated_image.header.stamp = rospy.Time.now()
             fov_msg.foveated_image.format = "png"
-            breakpoint()
             fov_msg.foveated_image.data = np.array(cv2.imencode('.png', resized, [cv2.IMWRITE_PNG_COMPRESSION, 9])[1]).astype(np.uint16).tostring()
 
             fov_image_group.foveated_images_groups.append(fov_msg)

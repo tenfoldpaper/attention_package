@@ -15,7 +15,7 @@
   <arg name="save_path" default="./foveation_imgs/"/>
   
   <!-- Foveation node -->
-  <node pkg="attention_package" type="alt_foveate.py" name="foveate" output="screen">
+  <node pkg="attention_package" type="foveate_cpp" name="foveate" output="screen">
     <param name="detection_topic" value="$(arg detection_topic)"/>
     <param name="publish_topic" value="$(arg foveation_topic)" />
     <param name="rgb_publish_topic" value="$(arg rgb_topic)" />

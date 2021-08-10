@@ -77,7 +77,6 @@ class foveation_node:
         y[1] = x[0] - x[2] / 2 # top left x
         y[2] = (x[1] + x[3] / 2) - y[0] # y size
         y[3] = (x[0] + x[2] / 2) - y[1] # x size
-
         return y
 
 
@@ -99,7 +98,7 @@ class foveation_node:
         range_ind = np.argpartition(hist[0], -2)[-2:] # result is ascending-sorted, i.e. argmax is at the last index.
         range_ind_low = range_ind[0] if range_ind[0] < range_ind[1] else range_ind[1]
         range_ind_high = range_ind[1] if range_ind[1] > range_ind[0] else range_ind[0]
-
+        breakpoint()
         return range_ind_low, range_ind_high, hist[1]
 
     def calculate_fovlevel_bb(self, bb_origin, bb_size, img_width, img_height, fovlevel):
@@ -119,7 +118,7 @@ class foveation_node:
         lower_bounds = list(zip(lower_bounds[0], lower_bounds[1]))
         upper_bounds = list(zip(upper_bounds[0], upper_bounds[1]))
         
-
+        breakpoint()
         fovlevel_bb = list(zip(lower_bounds, upper_bounds))
 
         return fovlevel_bb
@@ -133,6 +132,7 @@ class foveation_node:
         
 
         fovlevel_depth = list(zip(lower_bounds, upper_bounds))
+        breakpoint()
         return fovlevel_depth
 
     def foveation_callback(self, data):

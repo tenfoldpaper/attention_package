@@ -9,10 +9,18 @@ project(attention_package)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   rospy
+  roscpp
   sensor_msgs
   std_msgs
   message_generation
+  
 )
+
+find_package(OpenCV REQUIRED)
+find_package(cv_bridge REQUIRED)
+
+message(STATUS "OpenCV DIR:" ${OpenCV_INCLUDE_DIRS})
+message(STATUS "cv_bridge DIR:" ${cv_bridge_INCLUDE_DIRS})
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -112,12 +120,12 @@ generate_messages(
 catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES attention_package
-  CATKIN_DEPENDS 
-    rospy 
-    sensor_msgs 
-    std_msgs 
-    message_runtime
-    
+#  CATKIN_DEPENDS 
+#    rospy 
+#    sensor_msgs 
+#    std_msgs 
+#    roscpp
+#  DEPENDS opencv
 #  DEPENDS system_lib
 )
 
@@ -130,7 +138,10 @@ catkin_package(
 include_directories(
 # include
   ${catkin_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
+  ${cv_bridge_INCLUDE_DIRS}
 )
+
 
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
@@ -156,7 +167,13 @@ include_directories(
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_executable(foveate_cpp src/foveate_cpp.cpp)
+target_link_libraries(foveate_cpp ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} ${cv_bridge_LIBRARIES})
+add_dependencies(foveate_cpp ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
+add_executable(test_listener src/listener.cpp)
+target_link_libraries(test_listener ${catkin_LIBRARIES})
+add_dependencies(test_listener ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 ## Specify libraries to link a library or executable target against
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}

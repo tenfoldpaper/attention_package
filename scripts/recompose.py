@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from attention_package.msg import FoveatedImageGroups, FoveatedImage, FoveatedImages, Tuple
+from attention_package.msg import FoveatedImageCombined, FoveatedImageMeta, Tuple
 from yolov5_detector.msg import DetectionMsg, DetectionArray
 
 import numpy as np
@@ -78,6 +78,9 @@ class recompose_node:
                 recomposed_img = np.zeros((data.height, data.width), dtype=np.uint16)
             for i in range(0, detection_count): # and we want to loop through at the same foveation level, across detected objects.
                 curr_img = data.foveated_images_groups[i].foveated_images[f].foveated_image
+                curr_img = cv2.imdecode(curr_img, cv2.IMREAD_ANYDEPTH)
+                cv2.imshow("curr_img", curr_img)
+                cv2.waitKey(0)
                 curr_bb_origin = data.foveated_images_groups[i].foveated_images[f].bounding_box_origins.tpl
                 curr_bb_end = data.foveated_images_groups[i].foveated_images[f].bounding_box_sizes.tpl
                 resize_height = curr_bb_end[0] - curr_bb_origin[0]
