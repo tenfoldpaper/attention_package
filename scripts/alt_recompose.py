@@ -1,11 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 
 from attention_package.msg import FoveatedImageMeta, FoveatedImageCombined
 from yolov5_detector.msg import DetectionMsg, DetectionArray
 
 import numpy as np
 import rospy
-import ros_numpy
 import time
 from sensor_msgs.msg import CameraInfo, Image, CompressedImage
 import PIL.Image

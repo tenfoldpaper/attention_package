@@ -173,7 +173,7 @@ private:
         return linVector;
     }
 
-    auto calculateFovlevelDepth(int center_low, int center_high, cv::Mat& bins, int fovlevel){
+    cv::Mat calculateFovlevelDepth(int center_low, int center_high, cv::Mat& bins, int fovlevel){
 
         float _fovlevel = (float) fovlevel;
         float _center_low = (float) center_low;
