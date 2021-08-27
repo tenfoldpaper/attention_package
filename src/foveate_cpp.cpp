@@ -303,7 +303,7 @@ public:
         for(int f = 0; f < fovlevel; f++){
             //cv::Mat imgMask = cv::Mat(recvImg.size(), CV_16UC1, cv::Scalar(65535));
             // copyto wants depth 8UC
-            cv::Mat imgMask = cv::Mat(recvImg.size(), CV_8U, cv::Scalar(255));
+            cv::Mat imgMask = cv::Mat(recvImg.size(), CV_8U, cv::Scalar(0));            
             cv::Mat imgSend = cv::Mat::zeros(recvImg.size(), CV_16U);
             attention_package::FoveatedImageCombined fovMsg = attention_package::FoveatedImageCombined();
             for(int i = 0; i < finalFovMsg.detected_objects; i++){
@@ -336,7 +336,7 @@ public:
                 cv::minMaxLoc(depthCroppedImg, &min, &max);
                 imgSend(cropRows, cropCols) = depthCroppedImg;
 
-                cv::Mat croppedMask = cv::Mat(depthCroppedImg == 0);
+                cv::Mat croppedMask = cv::Mat(depthCroppedImg != 0);
                 //cv::Mat croppedMask16U;
                 
                 //croppedMask.convertTo(croppedMask16U, CV_16UC1, 257);
@@ -377,10 +377,17 @@ public:
                 cv::Mat colorMapImg;
                 cv::applyColorMap(imgSend8U, colorMapImg, cv::COLORMAP_JET);
                 cv::imshow("imgSendColor", colorMapImg);
-                cv::imshow("img Mask", imgMask);
-                cv::imshow("imgSendRaw", imgSend);
+                
+                // this little trick is needed for older versions of opencv to display an 8U image
+                cv::Mat imgMask3C;
+                cv::Mat imgMaskIn[] = {imgMask, imgMask, imgMask};
+                cv::merge(imgMaskIn, 3, imgMask3C);
+                
+                cv::imshow("img Mask", imgMask3C);
+                //cv::imshow("imgSendRaw", imgSend);
 
-                cv::waitKey();
+                cv::waitKey(0);
+                cv::destroyAllWindows();
             }
             
         }

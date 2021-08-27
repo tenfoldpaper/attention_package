@@ -69,6 +69,7 @@ class recompose_node:
         start = time.time()
         detection_count = data.detected_objects
         fov_level = data.foveation_level
+        print(detection_count)
         recomposed_img_arr = []
         # combined_img = np.zeros((data.height, data.width), dtype=np.uint16)
         for f in range(fov_level - 1, -1, -1): # we want to go in reverse, since the last index contains the lowest resolution image.
@@ -77,6 +78,7 @@ class recompose_node:
             else:
                 recomposed_img = np.zeros((data.height, data.width), dtype=np.uint16)
             for i in range(0, detection_count): # and we want to loop through at the same foveation level, across detected objects.
+                print(detection_count)
                 curr_img = data.foveated_images_groups[i].foveated_images[f].foveated_image
                 curr_img = cv2.imdecode(curr_img, cv2.IMREAD_ANYDEPTH)
                 cv2.imshow("curr_img", curr_img)

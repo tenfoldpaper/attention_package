@@ -174,6 +174,8 @@ add_dependencies(foveate_cpp ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORT
 add_executable(test_listener src/listener.cpp)
 target_link_libraries(test_listener ${catkin_LIBRARIES})
 add_dependencies(test_listener ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
+
 ## Specify libraries to link a library or executable target against
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}

@@ -6,6 +6,9 @@
   <arg name="foveation_topic" default="/attention/foveated" />
   <arg name="recompose_topic" default="/attention/recomposed" />
   <arg name="rgb_topic" default="/attention/rgb_foveated" />
+  <arg name="rgb_camera" default="/camera/rgb/camera_info" />
+  <arg name="depth_camera" default="/camera/depth_registered/camera_info" />
+
   
   <arg name="save_img" default="false"/>
   <arg name="save_rgb" default="false"/>
@@ -29,9 +32,11 @@
   </node>
 
   <!-- Image recomposition node -->
-  <node pkg="attention_package" type="alt_recompose.py" name="recompose" output="screen">
+  <node pkg="attention_package" type="alt_recompose_pointcloud.py" name="recompose" output="screen">
     <param name="foveation_topic" value="$(arg foveation_topic)" />
     <param name="publish_topic" value="$(arg recompose_topic)" />
+    <param name="rgb_camera" value="$(arg rgb_camera)" />
+    <param name="depth_camera" value="$(arg depth_camera)" />
     <param name="save_img" value="$(arg save_img)" />
     <param name="save_rgb" value="false" />
     <param name="show_img" value="$(arg show_img)" />
