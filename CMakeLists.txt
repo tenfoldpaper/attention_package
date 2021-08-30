@@ -12,6 +12,8 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   sensor_msgs
   std_msgs
+  pcl_conversions
+  pcl_ros
   message_generation
   
 )
@@ -171,6 +173,10 @@ add_executable(foveate_cpp src/foveate_cpp.cpp)
 target_link_libraries(foveate_cpp ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} ${cv_bridge_LIBRARIES})
 add_dependencies(foveate_cpp ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
+add_executable(recompose_pointcloud_cpp src/recompose_pointcloud_cpp.cpp)
+target_link_libraries(recompose_pointcloud_cpp ${catkin_LIBRARIES} ${OpenCV_LIBRARIES} ${cv_bridge_LIBRARIES})
+add_dependencies(recompose_pointcloud_cpp ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+
 add_executable(test_listener src/listener.cpp)
 target_link_libraries(test_listener ${catkin_LIBRARIES})
 add_dependencies(test_listener ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
@@ -193,11 +199,9 @@ add_dependencies(test_listener ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPO
 
 catkin_install_python(
   PROGRAMS 
-    scripts/fov_subber.py
-    scripts/recompose.py
-    scripts/foveate.py
     scripts/alt_foveate.py
     scripts/alt_recompose.py
+    scripts/alt_recompose_pointcloud.py
     
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
