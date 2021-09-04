@@ -32,11 +32,12 @@
   </node>
 
   <!-- Image recomposition node -->
-  <node pkg="attention_package" type="alt_recompose_pointcloud.py" name="recompose" output="screen">
+  <node pkg="attention_package" type="recompose_pointcloud_cpp" name="recompose" output="screen">
     <param name="foveation_topic" value="$(arg foveation_topic)" />
     <param name="publish_topic" value="$(arg recompose_topic)" />
     <param name="rgb_camera" value="$(arg rgb_camera)" />
     <param name="depth_camera" value="$(arg depth_camera)" />
+    
     <param name="save_img" value="$(arg save_img)" />
     <param name="save_rgb" value="false" />
     <param name="show_img" value="$(arg show_img)" />

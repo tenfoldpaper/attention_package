@@ -1,5 +1,6 @@
 #include "ros/ros.h"
 #include "std_msgs/String.h"
+#include "std_msgs/Header.h"
 #include "attention_package/FoveatedImageCombined.h"
 #include "attention_package/FoveatedImageMeta.h"
 #include "attention_package/Tuple.h"
@@ -55,81 +56,166 @@ public:
         foveationSubscriber = nh->subscribe(foveationTopic, 100, &RecompositionClass::recompositionCallback, this);
         pointcloudPublisher = nh->advertise<sensor_msgs::PointCloud2>(publishTopic, 10);
         
-        rgbCameraInfo = ros::topic::waitForMessage<sensor_msgs::CameraInfo>(rgbCameraTopic, *nh, ros::Duration(0.5));
-        depthCameraInfo = ros::topic::waitForMessage<sensor_msgs::CameraInfo>(depthCameraTopic, *nh, ros::Duration(0.5));
+        rgbCameraInfo = ros::topic::waitForMessage<sensor_msgs::CameraInfo>(rgbCameraTopic, *nh, ros::Duration(5));
+        depthCameraInfo = ros::topic::waitForMessage<sensor_msgs::CameraInfo>(depthCameraTopic, *nh, ros::Duration(5));
         
+        ROS_INFO("Received the camera infos");
         
         saveImg = saveImg_;
         saveRgb = saveRgb_;
         showImg = showImg_;
-        std::cout << "Initialised the recomposition node" << std::endl;
     }
 
     void recompositionCallback(const attention_package::FoveatedImageMeta::ConstPtr& data){
-        std::cout << "got some message" << std::endl;
-    }
-// 
-/* 
-    def __init__(self):
-        # args from launch file
-        rospy.loginfo('Pointcloud recomposing waiting for camera infos')
-        self.save_img = rospy.get_param("~save_img")
-        self.show_img = rospy.get_param("~show_img")
-        self.save_rgb = rospy.get_param("~save_rgb")
-        self.save_path = rospy.get_param("~save_path") + "recompose_imgs"
-        publish_topic = rospy.get_param("~publish_topic")
-        foveation_topic = rospy.get_param("~foveation_topic")
-        rgb_camera = rospy.get_param("~rgb_camera")
-        depth_camera = rospy.get_param("~depth_camera")
-        #self.rgb_camera_info = rospy.wait_for_message(rgb_camera, CameraInfo)
-        #self.depth_camera_info = rospy.wait_for_message(depth_camera, CameraInfo)
-        
-        # hardcode
-        self.rgb_camera_info = {'K':[520.055928, 0.000000, 312.535255, 0.000000, 520.312173, 242.265554, 0.000000, 0.000000, 1.000000]}
-        self.depth_camera_info = {'K':[576.092756, 0.000000, 316.286974, 0.000000, 575.853472, 239.895662, 0.000000, 0.000000, 1.000000]}
-        
-        # Camera parameters, where d = depth and r = rgb
-        self.cx_d = self.depth_camera_info['K'][2]
-        self.cy_d = self.depth_camera_info['K'][5]
-        self.fx_d = self.depth_camera_info['K'][0]
-        self.fy_d = self.depth_camera_info['K'][4]
-        self.cx_r = self.rgb_camera_info['K'][2]
-        self.cy_r = self.rgb_camera_info['K'][5]
-        self.fx_r = self.rgb_camera_info['K'][0]
-        self.fy_r = self.rgb_camera_info['K'][4]
-        self.T = [-0.0254, -0.00013, -0.00218]
-        
-        # PointCloud2 args
-        self.fields = [
-            PointField('x', 0, PointField.FLOAT32, 1),
-            PointField('y', 4, PointField.FLOAT32, 1),
-            PointField('z', 8, PointField.FLOAT32, 1),
-            PointField('rgb', 12, PointField.UINT32, 1)
-        ]
-        self.header = std_msgs.msg.Header()
-        self.header.frame_id = "camera_rgb_optical_frame"
-        
-        self.publisher = rospy.Publisher(publish_topic, PointCloud2, queue_size=5)
-        self.subscriber = rospy.Subscriber(foveation_topic, FoveatedImageMeta, self.recompose_callback)
-        self.bridge = cv_bridge.CvBridge()
-        
-        self.callback_counter = 0
-        if(self.save_img):
-            self.save_path = create_dir_and_return_path(self.save_path)
-        init_string = "Initialised recompose_node with the following parameters:\n" + \
-                    f"foveation_topic: {foveation_topic}\n" + \
-                    f"publish_topic: {publish_topic}\n" + \
-                    f"rgb_camera: {rgb_camera}\n" + \
-                    f"depth_camera: {depth_camera}\n" + \
-                    f"save_img: {self.save_img}\n" + \
-                    f"save_rgb: {self.save_rgb}\n" + \
-                    f"show_img: {self.show_img}\n" + \
-                    f"save_path: {self.save_path}"
 
+        auto start = std::chrono::system_clock::now();
+        
+        std::vector<float> T = {-0.0254, -0.0013, -0.00218};
+        std::vector<float> depthCameraInfoVec = {576.092756, 0.000000, 316.286974, 0.000000, 575.853472, 239.895662, 0.000000, 0.000000, 1.000000};
+        float cx_d = depthCameraInfoVec[2];
+        float cy_d = depthCameraInfoVec[5];
+        float fx_d = depthCameraInfoVec[0];
+        float fy_d = depthCameraInfoVec[4];
+        float cx_r = rgbCameraInfo->K[2];
+        float cy_r = rgbCameraInfo->K[5];
+        float fx_r = rgbCameraInfo->K[0];
+        float fy_r = rgbCameraInfo->K[4];
+        
+        std::cout << "Depth parameters:" << cx_d << " " << cy_d << " " << fx_d << " " << fy_d << " " << std::endl;
+        std::cout << "RGB parameters:" << cx_r << " " << cy_r << " " << fx_r << " " << fy_r << " " << std::endl;
+        
+        int fovLevel = data->foveation_level;
+        int width = data->width;
+        int height = data->height;
+        
+        // initialize the message to be sent 
+        sensor_msgs::PointCloud2 cloud;
+        std_msgs::Header header;
+        header.frame_id = "camera_rgb_optical_frame";
+        cloud.height = 1;
+        cloud.is_bigendian = false; // assumption
+        cloud.is_dense = false; // chances are not all the available slots will be filled up
+        
+
+        sensor_msgs::PointCloud2Modifier modifier(cloud);
+        //modifier.setPointCloud2FieldsByString(2,"xyz","rgba");
+        modifier.setPointCloud2FieldsByString(2,"xyz","rgb");
+        // there can be at most height x width pointclouds. In practice, this should be a lot less.
+        modifier.resize(1 * height * width); 
+
+        sensor_msgs::PointCloud2Iterator<float> out_x(cloud, "x");
+        sensor_msgs::PointCloud2Iterator<float> out_y(cloud, "y");
+        sensor_msgs::PointCloud2Iterator<float> out_z(cloud, "z");
+        sensor_msgs::PointCloud2Iterator<uint8_t> out_r(cloud, "r");
+        sensor_msgs::PointCloud2Iterator<uint8_t> out_g(cloud, "g");
+        sensor_msgs::PointCloud2Iterator<uint8_t> out_b(cloud, "b");
+        //sensor_msgs::PointCloud2Iterator<uint8_t> out_a(cloud, "a");
+        cv::Mat recvRgbImg = cv_bridge::toCvCopy(data->rgb_image, "bgr8")->image;
+        
+        int exceptionCounter = 0;
+        int pcCounter = 0;
+        
+        
+        for(int f = 0; f < fovLevel; f++){
+            
+            // this has been compressed into tiff byte data from the foveate_cpp node
+            cv::Mat depthImg = cv::imdecode(data->foveated_images_groups[f].foveated_image.data, cv::IMREAD_ANYDEPTH);
+            std::string filename = std::to_string(f) + "depthimg.png";
+            cv::imwrite(filename, depthImg);
+            depthImg.convertTo(depthImg, CV_32F);
+            depthImg *= 0.001; // scale down to metres
+            float scale_factor = (float) depthImg.size().height / (float) height; // computer by depth/rgb
+            cv::Mat rgbImg;
+            cv::resize(recvRgbImg, rgbImg, cv::Size(), scale_factor, scale_factor);
+            float scaled_cx_d = cx_d * scale_factor;
+            float scaled_cy_d = cy_d * scale_factor;
+            float scaled_fx_d = fx_d * scale_factor;
+            float scaled_fy_d = fy_d * scale_factor;
+            float scaled_cx_r = cx_r * scale_factor;
+            float scaled_cy_r = cy_r * scale_factor;
+            float scaled_fx_r = fx_r * scale_factor;
+            float scaled_fy_r = fy_r * scale_factor;
+            
+            for(int i = 0; i < depthImg.size().height; i++){
+                for(int j = 0; j < depthImg.size().width; j++){
+                    if(depthImg.at<int>(i, j) <= 0.01){
+                        exceptionCounter++;
+                        continue;
+                    }
+                    float P3D_x, P3D_y, P3D_z;
+                    int P2D_x, P2D_y;
+                    P3D_x = (((float) j - scaled_cx_d) * depthImg.at<float>(i, j) / scaled_fx_d) + T[0];
+                    P3D_y = (((float) i - scaled_cy_d) * depthImg.at<float>(i, j) / scaled_fy_d) + T[1];
+                    P3D_z = ((float) depthImg.at<float>(i, j)) + T[2];
+
+                    P2D_x = (int) ((P3D_x * scaled_fx_r / P3D_z) + scaled_cx_r);
+                    P2D_y = (int) ((P3D_y * scaled_fy_r / P3D_z) + scaled_cy_r);
+                    //std::cout << i << " " << j << std::endl;
+                    
+                    if(P2D_x >= rgbImg.size().width || P2D_y >= rgbImg.size().height){
+                        exceptionCounter++;
+                        continue;
+                    }
+                    
+                    try{
+                        cv::Vec3b color = rgbImg.at<cv::Vec3b>(P2D_y,P2D_x);
+
+                        std::uint8_t r = (color[2]);
+                        std::uint8_t g = (color[1]);
+                        std::uint8_t b = (color[0]);
+
+                        *out_x = P3D_x;
+                        *out_y = P3D_y;
+                        *out_z = P3D_z;
                         
+                        *out_r = r;
+                        *out_g = g;
+                        *out_b = b;
+                        //*out_a = 255;
+                        
+                        ++out_x;
+                        ++out_y;
+                        ++out_z;
+                        
+                        ++out_r;
+                        ++out_g;
+                        ++out_b;
+                        //++out_a;
 
-        rospy.loginfo(init_string)
-*/
+                        pcCounter++;
+
+                    }
+                    catch (...){
+                        exceptionCounter++;
+                    }
+                } // for j
+            } // for i
+        } // for f
+        ROS_INFO("Excluded XYZRGB points: %i", exceptionCounter);
+        ROS_INFO("Included XYZRGB points: %i", pcCounter);
+        float ratio = (float) pcCounter / ((float)(height*width));
+        ROS_INFO("Ratio of included/original: %f", ratio);
+        //cloud.width = height * width;
+        cloud.width = pcCounter;
+        cloud.header = header;
+        modifier.resize(pcCounter);
+        
+        try{
+            pointcloudPublisher.publish(cloud);   
+        }
+        catch(...){
+            ROS_ERROR("Failed to publish to the topic!");
+        }
+        
+        
+        auto end = std::chrono::system_clock::now();
+        std::chrono::duration<double> elapsed_seconds = end-start;
+        std::time_t end_time = std::chrono::system_clock::to_time_t(end);
+
+        ROS_INFO("Recomposition took %f s",elapsed_seconds.count());
+                        
+    }
+
 };
 
 union rgba{
@@ -149,35 +235,8 @@ union xyzrgba{
 
 int main(int argc, char** argv){
 
-    /*
-    ros::init(argc, argv, "recompose_pc_cpp");
-
-    ros::NodeHandle n("~");
-
-    std::string publishTopic, foveationTopic, savePath;
-    bool saveImg, saveRgb, showImg;
-
-    n.getParam("recompose_topic", publishTopic);
-    n.getParam("foveation_topic", foveationTopic);
-    n.getParam("save_path", savePath);
-
-    n.getParam("save_img", saveImg);
-    n.getParam("save_rgb", saveRgb);
-    n.getParam("show_img", showImg);
-
-    ROS_INFO("Started recomposition node with the following parameters.");
-    ROS_INFO("recompose_topic: %s", publishTopic.c_str());
-    ROS_INFO("foveation_topic: %s", foveationTopic.c_str());
-    ROS_INFO("save_path: %s", savePath.c_str());
-    ROS_INFO("save_img: %d", saveImg);
-    ROS_INFO("save_rgb: %d", saveRgb);
-    ROS_INFO("show_img: %d", showImg);
-
-    RecompositionClass rc = RecompositionClass(&n, foveationTopic, publishTopic, savePath, saveImg, saveRgb, showImg);
-
-    ros::spin();
-    */
-    
+   
+    /* 
     cv::Mat depthImg = cv::Mat::zeros(480, 640, CV_16U);
     cv::Mat rgbImg = cv::imread("/home/main/Documents/master_thesis_ros/cython/rgb_img.png", cv::IMREAD_COLOR);
 
@@ -294,6 +353,38 @@ int main(int argc, char** argv){
 
     std::cout << "finished computation at " << std::ctime(&end_time)
             << "elapsed time: " << elapsed_seconds.count() << "s\n";
+    */
+    
+    ros::init(argc, argv, "recompose_cpp");
 
+    ros::NodeHandle n("~");
+       
+
+    std::string foveationTopic, publishTopic, rgbCameraTopic, depthCameraTopic, savePath;
+    bool saveImg, saveRgb, showImg;
+
+    n.getParam("publish_topic", publishTopic);
+    n.getParam("foveation_topic", foveationTopic);
+    n.getParam("rgb_camera", rgbCameraTopic);
+    n.getParam("depth_camera", depthCameraTopic);
+    n.getParam("save_path", savePath);
+
+    n.getParam("save_img", saveImg);
+    n.getParam("save_rgb", saveRgb);
+    n.getParam("show_img", showImg);
+    
+    ROS_INFO("Started recomposition node with the following parameters.");
+    ROS_INFO("publish_topic: %s", publishTopic.c_str());
+    ROS_INFO("foveation_topic: %s", foveationTopic.c_str());
+    ROS_INFO("rgb_camera: %s", rgbCameraTopic.c_str());
+    ROS_INFO("depth_camera: %s", depthCameraTopic.c_str());
+    ROS_INFO("save_path: %s", savePath.c_str());
+    ROS_INFO("save_img: %d", saveImg);
+    ROS_INFO("save_rgb: %d", saveRgb);
+    ROS_INFO("show_img: %d", showImg);
+
+    RecompositionClass rc = RecompositionClass(&n, foveationTopic, publishTopic, rgbCameraTopic, depthCameraTopic, savePath, saveImg, saveRgb, showImg);
+
+    ros::spin();
     return 0;
 }
