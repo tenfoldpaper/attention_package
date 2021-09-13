@@ -5,7 +5,7 @@
 #include "attention_package/Tuple.h"
 
 #include "sensor_msgs/CompressedImage.h"
-#include "yolov5_detector/DetectionMsg.h"
+#include "yolov5_ros/DetectionMsg.h"
 
 #include <vector>
 #include <iostream>
@@ -42,7 +42,7 @@ private:
         
         return y;
     }
-
+    // gotta createthe segmentation version of this value and return the exact same parameters. Then it should work out somewhat
     std::tuple<int, int, cv::Mat> identifyCenterDepthRange(const cv::Mat& img, const cv::Mat& bb_origin, const cv::Mat& bb_size){
         // Image of shape height, width
         // bb origin and size are both 2x1 vectors
@@ -239,7 +239,7 @@ public:
         scale = linspace(1, (float) maxscale, fovlevel);
         std::cout << scale << std::endl;
     }
-    void foveationCallback(const yolov5_detector::DetectionMsg::ConstPtr& data){ // const pointer avoids making a copy of the incoming data.
+    void foveationCallback(const yolov5_ros::DetectionMsg::ConstPtr& data){ // const pointer avoids making a copy of the incoming data.
 
         auto start = std::chrono::system_clock::now();
         cv::Mat recvImg = cv_bridge::toCvCopy(data->depth_image, "mono16")->image;
