@@ -35,10 +35,10 @@ private:
     cv::Mat scale; // This value is constant for the given maxscale and fovlevel.
     cv::Mat xywh2ogsz(const cv::Mat& x){ // Pass by reference if NULL is not acceptable
         cv::Mat y = cv::Mat(1, 4, CV_32FC1);
-        y.at<float>(0, 0) = x.at<float>(0, 1) - (x.at<float>(0, 3) / 2);
-        y.at<float>(0, 1) = x.at<float>(0, 0) - (x.at<float>(0, 2) / 2);
-        y.at<float>(0, 2) = (x.at<float>(0, 1) + (x.at<float>(0, 3) / 2)) - y.at<float>(0, 0);
-        y.at<float>(0, 3) = (x.at<float>(0, 0) + (x.at<float>(0, 2) / 2)) - y.at<float>(0, 1);
+        y.at<float>(0, 0) = x.at<float>(0, 1) - (x.at<float>(0, 3) / 2); //y-orig
+        y.at<float>(0, 1) = x.at<float>(0, 0) - (x.at<float>(0, 2) / 2); //x-orig
+        y.at<float>(0, 2) = (x.at<float>(0, 1) + (x.at<float>(0, 3) / 2)) - y.at<float>(0, 0); //y-size
+        y.at<float>(0, 3) = (x.at<float>(0, 0) + (x.at<float>(0, 2) / 2)) - y.at<float>(0, 1); //x-size
         if(y.at<float>(0, 0) < 0){ // since there's a minus, need to handle the exception
             y.at<float>(0, 0) = 0;
         }
@@ -83,8 +83,7 @@ private:
             range_width = 0;
         }
         cv::Mat cropped_img = img(cv::Range(bb_origin.at<int>(0, 0), range_height), cv::Range(bb_origin.at<int>(0, 1), range_width));
-
-        cv::imwrite("../bien_thesis/cropped_img.jpg", cropped_img);
+        
         int histSize = 20;
         int channels[] = {1}; // Only depth image
         double min, max;
@@ -106,9 +105,14 @@ private:
         cv::calcHist(&cropped_img, 1, 0, cv::Mat(), hist, 1, &histSize, ranges, true, false);
         }
         catch(cv::Exception e){
-            std::cout << "Empty image was given. Defaulting to basic values." << std::endl;
-            return {0, 20, histEdges};
+            std::cout << "Empty image was given. Breaking." << std::endl;
+            return {-1, -1, histEdges};
         }     
+        //std::string croppedName = "../bien_thesis/" + std::to_string(range_height) + "__" + std::to_string(range_width) + "_cropped_img.jpg";
+        //std::string maskedName = "../bien_thesis/" + std::to_string(range_height) + "__" + std::to_string(range_width) + "_masked_img.jpg";
+        //cv::imwrite(croppedName, cropped_img);
+        //cv::imwrite(maskedName, img);
+        
         
         // we want to do some high-pass filtering. but this depends on the size of the image we are considering.
         // let's say that in order to be considered, the bin value has to be at least 5% of the total number of pixels 
@@ -335,7 +339,6 @@ public:
         attention_package::FoveatedImageMeta finalFovMsg = attention_package::FoveatedImageMeta();
         finalFovMsg.height = recvImg.size().height;
         finalFovMsg.width = recvImg.size().width;
-        finalFovMsg.detected_objects = data->detection_count;
         finalFovMsg.rgb_image = data->rgb_image;
         finalFovMsg.foveation_level = fovlevel;
         float _imgHeight = (float) recvImg.size().height;
@@ -363,9 +366,11 @@ public:
         }
         // create a scenario for when detection count is 0
         
+        int detected_objects = 0;
         for(int i = 0; i < data->detection_count; i++){
             
             _det_classes.push_back(data->detection_array[i].detection_info[0]);
+            std::cout << data->detection_array[i].detection_info[0] << std::endl;
             cv::Mat bb_raw(1, 4, CV_32FC1);
             for(int j = 0; j < 4; j++){
                 bb_raw.at<float>(0, j) = data->detection_array[i].detection_info[j + 1];
@@ -382,6 +387,9 @@ public:
             cv::Mat bin;
             if(_segmented){
                 std::tie(center_low, center_high, bin) = identifyCenterDepthRangeSegmented(recvImgMasked, bb_origin, bb_size);
+                if(center_low < 0){
+                    continue;
+                }
             }
             else{
                 std::tie(center_low, center_high, bin) = identifyCenterDepthRange(recvImg, bb_origin, bb_size);
@@ -391,7 +399,7 @@ public:
             std::tuple<cv::Mat, cv::Mat> fovlevel_bb = {lower_bounds, upper_bounds};
             cv::Mat fovlevel_depth = calculateFovlevelDepth(center_low, center_high, bin, fovlevel);
 
-
+            detected_objects++;
             _bins.push_back(bin);
             _bb_origins.push_back(bb_origin);
             _bb_sizes.push_back(bb_size);
@@ -401,7 +409,7 @@ public:
             _fovlevel_bbs.push_back(fovlevel_bb);
 
         }
-
+        finalFovMsg.detected_objects = detected_objects;
         for(int f = 0; f < fovlevel; f++){
             //cv::Mat imgMask = cv::Mat(recvImg.size(), CV_16UC1, cv::Scalar(65535));
             // copyto wants depth 8UC
@@ -446,10 +454,6 @@ public:
 
             }
             recvImg.copyTo(imgSend, imgMask);
-
-            std::cout << "Img scaled size int" << std::endl;
-            std::cout << (int) (imgSend.size().width / scale.at<float>(0, f)) << std::endl;
-            std::cout << (int) (imgSend.size().height / scale.at<float>(0, f)) << std::endl;
             
             cv::resize(imgSend, imgSend, cv::Size(), (double)(1/scale.at<float>(0, f)), (double)(1/scale.at<float>(0, f)), cv::INTER_NEAREST);
 
@@ -506,6 +510,10 @@ public:
 
         std::cout << "finished foveation at " << std::ctime(&end_time)
                 << "elapsed time: " << elapsed_seconds.count() << "s\n";
+        while(true){
+            int t = 1+1;
+        }
+        
     }
 };
 
