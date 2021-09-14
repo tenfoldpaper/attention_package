@@ -1,6 +1,8 @@
 <?xml version="1.0"?>
 <launch>
+  <include file="$(find affordance_ros)/launch/affordance_launch.launch" />
   <!-- arguments -->
+  <arg name="nodelet_manager" default="velodyne_nodelet_manager" />
   <arg name="detection_topic" default="/yolov5/detection" />
   <arg name="foveation_topic" default="/attention/foveated" />
   <arg name="recompose_topic" default="/attention/recomposed" />

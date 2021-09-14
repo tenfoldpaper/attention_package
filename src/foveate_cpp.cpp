@@ -39,10 +39,97 @@ private:
         y.at<float>(0, 1) = x.at<float>(0, 0) - (x.at<float>(0, 2) / 2);
         y.at<float>(0, 2) = (x.at<float>(0, 1) + (x.at<float>(0, 3) / 2)) - y.at<float>(0, 0);
         y.at<float>(0, 3) = (x.at<float>(0, 0) + (x.at<float>(0, 2) / 2)) - y.at<float>(0, 1);
-        
+        if(y.at<float>(0, 0) < 0){ // since there's a minus, need to handle the exception
+            y.at<float>(0, 0) = 0;
+        }
+        if(y.at<float>(0, 1) < 0){
+            y.at<float>(0, 1) = 0;
+        }
+        if(y.at<float>(0, 2) < 0){ // since there's a minus, need to handle the exception
+            y.at<float>(0, 2) = 0;
+        }
+        if(y.at<float>(0, 3) < 0){
+            y.at<float>(0, 3) = 0;
+        }
         return y;
     }
-    // gotta createthe segmentation version of this value and return the exact same parameters. Then it should work out somewhat
+    
+    std::tuple<int, int, cv::Mat> identifyCenterDepthRangeSegmented(const cv::Mat& img, const cv::Mat& bb_origin, const cv::Mat& bb_size){
+    // img: Image with segmentation masking already applied
+    // bb_origin, bb_size: bounding box information
+        int height = img.rows;
+        int width = img.cols;
+
+        int range_height;
+        int range_width;
+
+        if(bb_origin.at<int>(0, 0) + bb_size.at<int>(0, 0) < height){
+            range_height = bb_origin.at<int>(0, 0) + bb_size.at<int>(0, 0);
+        }
+        else{
+            range_height = height - 1;
+        }
+        if(range_height < 0){
+            range_height = 0;
+        }
+        
+        if(bb_origin.at<int>(0, 1) + bb_size.at<int>(0, 1) < width){
+            range_width = bb_origin.at<int>(0, 1) + bb_size.at<int>(0, 1);
+        }
+        else{
+            range_width = width - 1;
+        }
+        if(range_width < 0){
+            range_width = 0;
+        }
+        cv::Mat cropped_img = img(cv::Range(bb_origin.at<int>(0, 0), range_height), cv::Range(bb_origin.at<int>(0, 1), range_width));
+
+        cv::imwrite("../bien_thesis/cropped_img.jpg", cropped_img);
+        int histSize = 20;
+        int channels[] = {1}; // Only depth image
+        double min, max;
+        cv::minMaxLoc(cropped_img, &min, &max);
+        float grayRange[] = {1, (float) max + 1};
+        const float * ranges[] = {grayRange};
+        cv::MatND hist;
+        
+        // Get the list of bin edge values for further down the processing
+        cv::Mat histEdges = cv::Mat(1, histSize+1, CV_32F);
+        float binSize = (float) max / histSize;
+        for(int i = 0; i <= histSize+1; i++){
+            histEdges.at<float>(0, i) = i * binSize;
+            if(i == histSize+1){
+                histEdges.at<float>(0, i) = (float) max;
+            }
+        }
+        try{
+        cv::calcHist(&cropped_img, 1, 0, cv::Mat(), hist, 1, &histSize, ranges, true, false);
+        }
+        catch(cv::Exception e){
+            std::cout << "Empty image was given. Defaulting to basic values." << std::endl;
+            return {0, 20, histEdges};
+        }     
+        
+        // we want to do some high-pass filtering. but this depends on the size of the image we are considering.
+        // let's say that in order to be considered, the bin value has to be at least 5% of the total number of pixels 
+        int pixel_threshold = (bb_size.at<int>(0, 0) * bb_size.at<int>(0, 1)) / 20;
+        int range_ind_low = 100;
+        int range_ind_high = 0;
+        for(int i = 0; i < histSize+1; i++){
+            if(hist.at<int>(0, i) > pixel_threshold){
+                if(range_ind_low > i){
+                    range_ind_low = i;
+                }
+                if(range_ind_high < i){
+                    range_ind_high = i;
+                }
+            }
+        }
+        
+        return {range_ind_low, range_ind_high, histEdges};
+        
+    }
+
     std::tuple<int, int, cv::Mat> identifyCenterDepthRange(const cv::Mat& img, const cv::Mat& bb_origin, const cv::Mat& bb_size){
         // Image of shape height, width
         // bb origin and size are both 2x1 vectors
@@ -237,10 +324,9 @@ public:
         saveRgb = saveRgb_;
         showImg = showImg_;
         scale = linspace(1, (float) maxscale, fovlevel);
-        std::cout << scale << std::endl;
     }
     void foveationCallback(const yolov5_ros::DetectionMsg::ConstPtr& data){ // const pointer avoids making a copy of the incoming data.
-
+        
         auto start = std::chrono::system_clock::now();
         cv::Mat recvImg = cv_bridge::toCvCopy(data->depth_image, "mono16")->image;
         cv::Mat recvRgbImg = cv_bridge::toCvCopy(data->rgb_image, "bgr8")->image;
@@ -254,6 +340,8 @@ public:
         finalFovMsg.foveation_level = fovlevel;
         float _imgHeight = (float) recvImg.size().height;
         float _imgWidth = (float) recvImg.size().width;
+        bool _segmented = data->segmented;
+        
         
         std::vector<std::tuple<cv::Mat, cv::Mat>> _fovlevel_bbs = std::vector<std::tuple<cv::Mat, cv::Mat>>();
         std::vector<cv::Mat> _bb_origins = std::vector<cv::Mat>();
@@ -264,7 +352,17 @@ public:
         std::vector<int> _det_classes = std::vector<int>();
         std::vector<cv::Mat> _bins = std::vector<cv::Mat>();
         std::vector<cv::Mat> _scales = std::vector<cv::Mat>();
+        
+        cv::Mat recvImgMasked;
+        if(_segmented){
+            cv::Mat segmentationMask = cv_bridge::toCvCopy(data->segmentation_image, "mono8")->image;
 
+            recvImg.copyTo(recvImgMasked, segmentationMask);
+            cv::imwrite("../bien_thesis/recvImgMasked.jpg", recvImgMasked);
+
+        }
+        // create a scenario for when detection count is 0
+        
         for(int i = 0; i < data->detection_count; i++){
             
             _det_classes.push_back(data->detection_array[i].detection_info[0]);
@@ -282,8 +380,12 @@ public:
             
             int center_low, center_high;
             cv::Mat bin;
-            std::tie(center_low, center_high, bin) = identifyCenterDepthRange(recvImg, bb_origin, bb_size);
-            
+            if(_segmented){
+                std::tie(center_low, center_high, bin) = identifyCenterDepthRangeSegmented(recvImgMasked, bb_origin, bb_size);
+            }
+            else{
+                std::tie(center_low, center_high, bin) = identifyCenterDepthRange(recvImg, bb_origin, bb_size);
+            }
             cv::Mat lower_bounds, upper_bounds;
             std::tie(lower_bounds, upper_bounds) = calculateFovlevelBb(bb_origin, bb_size, recvImg.size().width, recvImg.size().height, fovlevel);
             std::tuple<cv::Mat, cv::Mat> fovlevel_bb = {lower_bounds, upper_bounds};
