@@ -510,9 +510,6 @@ public:
 
         std::cout << "finished foveation at " << std::ctime(&end_time)
                 << "elapsed time: " << elapsed_seconds.count() << "s\n";
-        while(true){
-            int t = 1+1;
-        }
         
     }
 };
