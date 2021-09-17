@@ -357,11 +357,14 @@ public:
         std::vector<cv::Mat> _scales = std::vector<cv::Mat>();
         
         cv::Mat recvImgMasked;
+        cv::Mat recvRgbImgMasked;
         if(_segmented){
             cv::Mat segmentationMask = cv_bridge::toCvCopy(data->segmentation_image, "mono8")->image;
 
             recvImg.copyTo(recvImgMasked, segmentationMask);
-            cv::imwrite("../bien_thesis/recvImgMasked.jpg", recvImgMasked);
+            recvRgbImg.copyTo(recvRgbImgMasked, segmentationMask);
+            cv::imwrite("../bien_thesis/recvImgMasked.png", recvImgMasked);
+            cv::imwrite("../bien_thesis/recvRgbImgMasked.jpg", recvRgbImgMasked);
 
         }
         // create a scenario for when detection count is 0
@@ -370,7 +373,6 @@ public:
         for(int i = 0; i < data->detection_count; i++){
             
             _det_classes.push_back(data->detection_array[i].detection_info[0]);
-            std::cout << data->detection_array[i].detection_info[0] << std::endl;
             cv::Mat bb_raw(1, 4, CV_32FC1);
             for(int j = 0; j < 4; j++){
                 bb_raw.at<float>(0, j) = data->detection_array[i].detection_info[j + 1];
@@ -440,6 +442,13 @@ public:
                 
                 cv::Mat croppedImg = recvImg(cropRows, cropCols);
                 cv::Mat depthCroppedImg = cv::Mat(croppedImg > (int) bin.at<float>(0, depth_lower) & croppedImg < (int) bin.at<float>(0, depth_upper));
+                if(saveImg){
+                    std::string cropName = "../bien_thesis/crops/xyCrop" + std::to_string(f) + "__" + std::to_string(i) + ".jpg";
+                    std::string depthName = "../bien_thesis/crops/depthCrop" + std::to_string(f) + "__" + std::to_string(i) + ".jpg";
+                    cv::imwrite(cropName, croppedImg);
+                    cv::imwrite(depthName, depthCroppedImg);
+                    
+                }
 
                 double min, max;
                 cv::minMaxLoc(croppedImg, &min, &max);
@@ -453,11 +462,15 @@ public:
                 croppedMask.copyTo(imgMask(cv::Rect(bb_origin.at<int>(0, 1), bb_origin.at<int>(0, 0), croppedMask.cols, croppedMask.rows)));
 
             }
+            cv::Mat newRecvImg;
             recvImg.copyTo(imgSend, imgMask);
+            cv::Mat inverseImgMask = 255 - imgMask;
+            recvImg.copyTo(newRecvImg, inverseImgMask);
+            recvImg = newRecvImg;
             
             cv::resize(imgSend, imgSend, cv::Size(), (double)(1/scale.at<float>(0, f)), (double)(1/scale.at<float>(0, f)), cv::INTER_NEAREST);
 
-            std::cout << imgSend.size() << std::endl;
+            //std::cout << imgSend.size() << std::endl;
 
             std::vector<uchar> buffer;
             buffer.resize(2 * MB);
@@ -472,7 +485,7 @@ public:
                 //visualisation part of the code
                 //double tmin, tmax;
                 
-                //cv::minMaxLoc(imgSend, &tmin, &tmax);
+                //cv::minMaxLoc(imgSend, &tmin, &tmax); 
                 //std::cout << tmin << " " << tmax << std::endl;
                 cv::Mat imgSend8U = imgSend / 255;
                 //cv::minMaxLoc(imgSend8U, &tmin, &tmax);
@@ -494,6 +507,31 @@ public:
 
                 cv::waitKey(0);
                 cv::destroyAllWindows();
+            }
+            if(saveImg){
+                double tmin, tmax;
+                cv::minMaxLoc(imgSend, &tmin, &tmax); 
+                cv::Mat imgSend8U = 255 * (imgSend / tmax);
+                imgSend8U.convertTo(imgSend8U, CV_8U);
+                cv::Mat colorMapImg;
+                
+                cv::applyColorMap(imgSend8U, colorMapImg, cv::COLORMAP_JET);
+                std::string colorMapName = "../bien_thesis/notcrops/colorMap" + std::to_string(f) + ".jpg";
+                std::string imgMaskName = "../bien_thesis/notcrops/imgMask" + std::to_string(f) + ".jpg";
+                std::string inverseImgMaskName = "../bien_thesis/notcrops/inverseImgMask" + std::to_string(f) + ".jpg";
+                std::string recvImgName = "../bien_thesis/notcrops/recvImg" + std::to_string(f) + ".png";
+                cv::Mat imgMask3C;
+                cv::Mat imgMaskIn[] = {imgMask, imgMask, imgMask};
+                cv::merge(imgMaskIn, 3, imgMask3C);
+                cv::Mat inverseImgMask3C;
+                cv::Mat inverseImgMaskIn[] = {inverseImgMask, inverseImgMask, inverseImgMask};
+                cv::merge(inverseImgMaskIn, 3, inverseImgMask3C);
+                
+                cv::imwrite(colorMapName, colorMapImg);
+                cv::imwrite(imgMaskName, imgMask3C);
+                cv::imwrite(inverseImgMaskName, inverseImgMask3C);
+                
+                cv::imwrite(recvImgName, recvImg);
             }
             
         }
