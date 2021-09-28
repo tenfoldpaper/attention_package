@@ -40,6 +40,8 @@ private:
     bool saveImg;
     bool showImg;
     bool savePath;
+    double running_counter;
+    double running_total;
     bool saveRgb;
 
 public:
@@ -53,8 +55,8 @@ public:
                         bool saveRgb_,
                         bool showImg_)
     {
-        foveationSubscriber = nh->subscribe(foveationTopic, 100, &RecompositionClass::recompositionCallback, this);
-        pointcloudPublisher = nh->advertise<sensor_msgs::PointCloud2>(publishTopic, 10);
+        foveationSubscriber = nh->subscribe(foveationTopic, 1, &RecompositionClass::recompositionCallback, this); //freshest message
+        pointcloudPublisher = nh->advertise<sensor_msgs::PointCloud2>(publishTopic, 1); //freshest message
         
         rgbCameraInfo = ros::topic::waitForMessage<sensor_msgs::CameraInfo>(rgbCameraTopic, *nh, ros::Duration(5));
         depthCameraInfo = ros::topic::waitForMessage<sensor_msgs::CameraInfo>(depthCameraTopic, *nh, ros::Duration(5));
@@ -64,26 +66,26 @@ public:
         saveImg = saveImg_;
         saveRgb = saveRgb_;
         showImg = showImg_;
+        running_counter = 0;
+        running_total = 0;
     }
 
     void recompositionCallback(const attention_package::FoveatedImageMeta::ConstPtr& data){
 
         auto start = std::chrono::system_clock::now();
         
-        std::vector<float> T = {-0.0254, -0.0013, -0.00218};
-        std::vector<float> depthCameraInfoVec = {576.092756, 0.000000, 316.286974, 0.000000, 575.853472, 239.895662, 0.000000, 0.000000, 1.000000};
-        float cx_d = depthCameraInfoVec[2];
-        float cy_d = depthCameraInfoVec[5];
-        float fx_d = depthCameraInfoVec[0];
-        float fy_d = depthCameraInfoVec[4];
+        //std::vector<float> T = {-0.0254, -0.0013, -0.00218};
+        std::vector<float> T = {0, 0, 0}; // is the camera already registered?
+        //std::vector<float> depthCameraInfoVec = {576.092756, 0.000000, 316.286974, 0.000000, 575.853472, 239.895662, 0.000000, 0.000000, 1.000000};
+        float cx_d = depthCameraInfo->K[2];
+        float cy_d = depthCameraInfo->K[5];
+        float fx_d = depthCameraInfo->K[0];
+        float fy_d = depthCameraInfo->K[4];
         float cx_r = rgbCameraInfo->K[2];
         float cy_r = rgbCameraInfo->K[5];
         float fx_r = rgbCameraInfo->K[0];
         float fy_r = rgbCameraInfo->K[4];
-        
-        std::cout << "Depth parameters:" << cx_d << " " << cy_d << " " << fx_d << " " << fy_d << " " << std::endl;
-        std::cout << "RGB parameters:" << cx_r << " " << cy_r << " " << fx_r << " " << fy_r << " " << std::endl;
-        
+                
         int fovLevel = data->foveation_level;
         int width = data->width;
         int height = data->height;
@@ -91,6 +93,9 @@ public:
         // initialize the message to be sent 
         sensor_msgs::PointCloud2 cloud;
         std_msgs::Header header;
+        header.stamp = ros::Time::now();
+        std::cout << header.stamp.nsec << std::endl;
+        
         header.frame_id = "camera_rgb_optical_frame";
         cloud.height = 1;
         cloud.is_bigendian = false; // assumption
@@ -113,8 +118,7 @@ public:
         cv::Mat recvRgbImg = cv_bridge::toCvCopy(data->rgb_image, "bgr8")->image;
         
         int exceptionCounter = 0;
-        int pcCounter = 0;
-        
+        int pcCounter = 0;   
         
         for(int f = 0; f < fovLevel; f++){
             
@@ -191,8 +195,6 @@ public:
                 } // for j
             } // for i
         } // for f
-        ROS_INFO("Excluded XYZRGB points: %i", exceptionCounter);
-        ROS_INFO("Included XYZRGB points: %i", pcCounter);
         float ratio = (float) pcCounter / ((float)(height*width));
         ROS_INFO("Ratio of included/original: %f", ratio);
         //cloud.width = height * width;
@@ -211,8 +213,11 @@ public:
         auto end = std::chrono::system_clock::now();
         std::chrono::duration<double> elapsed_seconds = end-start;
         std::time_t end_time = std::chrono::system_clock::to_time_t(end);
-
-        ROS_INFO("Recomposition took %f s",elapsed_seconds.count());
+        ros::Duration tempTime = ros::Time::now() - data->image_time;        
+        double procTime = tempTime.toSec();
+        running_total += procTime;
+        running_counter++;
+        ROS_INFO("Recomposition took %4.3f s, total time took %4.3f s, avg %4.3f over %3.0f samples",elapsed_seconds.count(), procTime, running_total/running_counter, running_counter);
                         
     }
 

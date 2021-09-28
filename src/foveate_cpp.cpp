@@ -31,6 +31,7 @@ private:
     int maxscale = 5;
     bool saveImg;
     bool showImg;
+    float depthCropThreshold;
     bool saveRgb;
     cv::Mat scale; // This value is constant for the given maxscale and fovlevel.
     cv::Mat xywh2ogsz(const cv::Mat& x){ // Pass by reference if NULL is not acceptable
@@ -319,9 +320,9 @@ public:
                     bool saveRgb_, 
                     bool showImg_)
     {
-        detectionSubscriber = nh->subscribe(detectionTopic, 100, &FoveationClass::foveationCallback, this);
-        foveationPublisher = nh->advertise<attention_package::FoveatedImageMeta>(publishTopic, 10);
-        rgbFoveationPublisher = nh->advertise<attention_package::FoveatedImageMeta>(rgbPublishTopic, 10);
+        detectionSubscriber = nh->subscribe(detectionTopic, 1, &FoveationClass::foveationCallback, this);
+        foveationPublisher = nh->advertise<attention_package::FoveatedImageMeta>(publishTopic, 1);
+        rgbFoveationPublisher = nh->advertise<attention_package::FoveatedImageMeta>(rgbPublishTopic, 1);
         fovlevel = fovlevel_;
         maxscale = maxscale_;
         saveImg = saveImg_;
@@ -331,18 +332,20 @@ public:
     }
     void foveationCallback(const yolov5_ros::DetectionMsg::ConstPtr& data){ // const pointer avoids making a copy of the incoming data.
         
-        auto start = std::chrono::system_clock::now();
+        auto start = std::chrono::high_resolution_clock::now();
         cv::Mat recvImg = cv_bridge::toCvCopy(data->depth_image, "mono16")->image;
         cv::Mat recvRgbImg = cv_bridge::toCvCopy(data->rgb_image, "bgr8")->image;
         #define MB 1024*1024
 
         attention_package::FoveatedImageMeta finalFovMsg = attention_package::FoveatedImageMeta();
+        finalFovMsg.image_time = data->image_time;
         finalFovMsg.height = recvImg.size().height;
         finalFovMsg.width = recvImg.size().width;
         finalFovMsg.rgb_image = data->rgb_image;
         finalFovMsg.foveation_level = fovlevel;
         float _imgHeight = (float) recvImg.size().height;
         float _imgWidth = (float) recvImg.size().width;
+        depthCropThreshold = 0.2;
         bool _segmented = data->segmented;
         
         
@@ -367,7 +370,40 @@ public:
             cv::imwrite("../bien_thesis/recvRgbImgMasked.jpg", recvRgbImgMasked);
 
         }
-        // create a scenario for when detection count is 0
+        
+        // Scenario for when detection_count is 0
+        if(data->detection_count == 0){ 
+        // no object detected -> flat downscaling to the scale size
+            //ROS_INFO("No object was detected!");
+            finalFovMsg.foveation_level = 1;
+            cv::Mat imgSend;
+            double maxscaleDouble = (double) maxscale;
+            cv::resize(recvImg, imgSend, cv::Size(), (double)(1.0/maxscaleDouble), (double)(1.0/maxscaleDouble), cv::INTER_NEAREST);
+            
+            attention_package::FoveatedImageCombined fovMsg = attention_package::FoveatedImageCombined();
+            std::vector<uchar> buffer;
+            buffer.resize(2 * MB);
+            fovMsg.foveated_image.header.stamp = ros::Time::now();
+            fovMsg.foveated_image.format = "tiff";
+            // encode to buffer then assign to data
+            cv::imencode(".tiff", imgSend, buffer);
+            fovMsg.foveated_image.data = buffer;
+            finalFovMsg.foveated_images_groups.push_back(fovMsg);
+            
+            
+            try{
+                foveationPublisher.publish(finalFovMsg);
+            }
+            catch(...){
+                ROS_ERROR("Failed to publish to the topic!");
+            }
+            auto end = std::chrono::high_resolution_clock::now();
+            double elapsed_ms = std::chrono::duration<double, std::milli>(end - start).count();
+
+            ROS_INFO("Foveation elapsed time: %f", elapsed_ms);
+            return;
+        }
+        
         
         int detected_objects = 0;
         for(int i = 0; i < data->detection_count; i++){
@@ -442,6 +478,14 @@ public:
                 
                 cv::Mat croppedImg = recvImg(cropRows, cropCols);
                 cv::Mat depthCroppedImg = cv::Mat(croppedImg > (int) bin.at<float>(0, depth_lower) & croppedImg < (int) bin.at<float>(0, depth_upper));
+                float nonZeroPixels = (float) cv::countNonZero(depthCroppedImg);
+                float cropSize = (float) ((bb_end.at<int>(0, 0) - bb_origin.at<int>(0, 0)) * (bb_end.at<int>(0, 1) - bb_origin.at<int>(0, 1)));
+                float depthCropRatio = nonZeroPixels / cropSize;
+                //std::cout << "nonzero: " << nonZeroPixels << " crop size: " << cropSize << " ratio: " << depthCropRatio << std::endl;
+                if(depthCropRatio < depthCropThreshold){ // if there are far too few pixels in the depth cropped image, then it's likely that the object is ill-conditioned for the kinect.
+                    // the histogram is of size 20, so 0 to 19 covers all the depth range.
+                    depthCroppedImg = cv::Mat(croppedImg > (int) bin.at<float>(0, 0) & croppedImg < (int) bin.at<float>(0, 19));
+                } 
                 if(saveImg){
                     std::string cropName = "../bien_thesis/crops/xyCrop" + std::to_string(f) + "__" + std::to_string(i) + ".jpg";
                     std::string depthName = "../bien_thesis/crops/depthCrop" + std::to_string(f) + "__" + std::to_string(i) + ".jpg";
@@ -544,10 +588,8 @@ public:
         }
         auto end = std::chrono::system_clock::now();
         std::chrono::duration<double> elapsed_seconds = end-start;
-        std::time_t end_time = std::chrono::system_clock::to_time_t(end);
 
-        std::cout << "finished foveation at " << std::ctime(&end_time)
-                << "elapsed time: " << elapsed_seconds.count() << "s\n";
+        ROS_INFO("elapsed time: %f", elapsed_seconds.count());
         
     }
 };
@@ -558,7 +600,7 @@ int main(int argc, char **argv){
 
     ros::NodeHandle n("~");
 
-    ros::Publisher chatter_pub = n.advertise<std_msgs::String>("chatter", 1000);
+    //ros::Publisher chatter_pub = n.advertise<std_msgs::String>("chatter", 1000);
 
     std::string publishTopic, rgbPublishTopic, detectionTopic, savePath;
     int fovlevel;
